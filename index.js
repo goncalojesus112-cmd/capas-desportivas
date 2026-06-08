@@ -54,10 +54,12 @@ async function publicarCapas() {
   }
 }
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Bot online: ${client.user.tag}`);
   // Publica todos os dias às 07:00
   cron.schedule('0 7 * * *', publicarCapas, { timezone: 'Europe/Lisbon' });
+  
+  // TESTE: publica imediatamente ao arrancar
+  await publicarCapas();
 });
-
 client.login(TOKEN);
