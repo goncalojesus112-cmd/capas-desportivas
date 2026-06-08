@@ -1,31 +1,24 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const TOKEN = process.env.BOT_TOKEN;
 
-function getDatas() {
-  const hoje = new Date();
-  const ano = hoje.getFullYear();
-  const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-  const dia = String(hoje.getDate()).padStart(2, '0');
-  const pasta = `${ano}${mes}`;           // ex: 202606
-  const ficheiro = `${dia}${mes}${ano}`; // ex: 08062026
-  return { pasta, ficheiro };
-}
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
+};
 
-async function getCapa(nomeJornal) {
-  const { pasta, ficheiro } = getDatas();
-  const url = `https://capasjornais.pt/img/FrontPages/${pasta}/jornal_${nomeJornal}_${ficheiro}.jpg`;
+// Vai buscar o og:image da página — funciona para qualquer jornal
+async function getCapaFromPage(pageUrl) {
   try {
-    const response = await axios.head(url, {
-      timeout: 8000,
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    if (response.status === 200) return url;
+    const { data } = await axios.get(pageUrl, { timeout: 10000, headers: HEADERS });
+    const $ = cheerio.load(data);
+    const ogImage = $('meta[property="og:image"]').attr('content');
+    if (ogImage && ogImage.startsWith('http')) return ogImage;
     return null;
   } catch (e) {
     return null;
@@ -37,15 +30,27 @@ async function publicarCapas() {
   if (!channel) return;
 
   const jornais = [
-    { key: 'a_bola', nome: 'A Bola', cor: 0xFF0000 },
-    { key: 'record', nome: 'Record', cor: 0x006400 },
-    { key: 'o_jogo', nome: 'O Jogo', cor: 0xFF8C00 }
+    {
+      nome: 'A Bola',
+      cor: 0xFF0000,
+      url: 'https://capasjornais.pt/Capa-Jornal-A-Bola.html'
+    },
+    {
+      nome: 'Record',
+      cor: 0x006400,
+      url: 'https://capasjornais.pt/Capa-Jornal-Record.html'
+    },
+    {
+      nome: 'O Jogo',
+      cor: 0xFF8C00,
+      url: 'https://capasjornais.pt/Capa-Jornal-O-Jogo.html'
+    }
   ];
 
   await channel.send('📰 **Capas Desportivas de hoje!**');
 
   for (const jornal of jornais) {
-    const capaUrl = await getCapa(jornal.key);
+    const capaUrl = await getCapaFromPage(jornal.url);
     const embed = new EmbedBuilder()
       .setTitle(`📰 ${jornal.nome}`)
       .setColor(jornal.cor)
