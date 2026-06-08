@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -15,12 +16,33 @@ function getDataHoje() {
   return `${ano}-${mes}-${dia}`;
 }
 
-async function getCapa(nomeJornal) {
+// A Bola e Record via capasdehoje.pt (CDN direto)
+async function getCapaCDN(nomeJornal) {
   const data = getDataHoje();
   const url = `https://cdn.capasdehoje.pt/capas/${data}/capa-${nomeJornal}-large.webp`;
   try {
-    const response = await axios.head(url);
+    const response = await axios.head(url, { timeout: 5000 });
     if (response.status === 200) return url;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// O Jogo via vercapas.com (scraping do og:image)
+async function getCapaOJogo() {
+  try {
+    const { data } = await axios.get('https://www.vercapas.com/capa/o-jogo.html', {
+      timeout: 8000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36' }
+    });
+    const $ = cheerio.load(data);
+    // Extrai a imagem grande diretamente do og:image
+    const ogImage = $('meta[property="og:image"]').attr('content');
+    if (ogImage && ogImage.includes('covers')) {
+      // Converte o URL da thumbnail para a imagem grande
+      return ogImage.replace('/thumbc/', '/covers/').replace('thumbc', 'covers');
+    }
     return null;
   } catch (e) {
     return null;
@@ -31,16 +53,16 @@ async function publicarCapas() {
   const channel = await client.channels.fetch(CHANNEL_ID);
   if (!channel) return;
 
-  const jornais = [
-    { key: 'a-bola', nome: 'A Bola', cor: 0xFF0000 },
-    { key: 'record', nome: 'Record', cor: 0x006400 },
-    { key: 'o-jogo', nome: 'O Jogo', cor: 0xFF8C00 }
-  ];
-
   await channel.send('📰 **Capas Desportivas de hoje!**');
 
+  const jornais = [
+    { nome: 'A Bola', cor: 0xFF0000, fn: () => getCapaCDN('a-bola') },
+    { nome: 'Record', cor: 0x006400, fn: () => getCapaCDN('record') },
+    { nome: 'O Jogo',  cor: 0xFF8C00, fn: () => getCapaOJogo() }
+  ];
+
   for (const jornal of jornais) {
-    const capaUrl = await getCapa(jornal.key);
+    const capaUrl = await jornal.fn();
     const embed = new EmbedBuilder()
       .setTitle(`📰 ${jornal.nome}`)
       .setColor(jornal.cor)
