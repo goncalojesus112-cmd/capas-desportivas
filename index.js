@@ -1,48 +1,31 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const TOKEN = process.env.BOT_TOKEN;
 
-function getDataHoje() {
+function getDatas() {
   const hoje = new Date();
   const ano = hoje.getFullYear();
   const mes = String(hoje.getMonth() + 1).padStart(2, '0');
   const dia = String(hoje.getDate()).padStart(2, '0');
-  return `${ano}-${mes}-${dia}`;
+  const pasta = `${ano}${mes}`;           // ex: 202606
+  const ficheiro = `${dia}${mes}${ano}`; // ex: 08062026
+  return { pasta, ficheiro };
 }
 
-// A Bola e Record via capasdehoje.pt (CDN direto)
-async function getCapaCDN(nomeJornal) {
-  const data = getDataHoje();
-  const url = `https://cdn.capasdehoje.pt/capas/${data}/capa-${nomeJornal}-large.webp`;
+async function getCapa(nomeJornal) {
+  const { pasta, ficheiro } = getDatas();
+  const url = `https://capasjornais.pt/img/FrontPages/${pasta}/jornal_${nomeJornal}_${ficheiro}.jpg`;
   try {
-    const response = await axios.head(url, { timeout: 5000 });
-    if (response.status === 200) return url;
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// O Jogo via vercapas.com (scraping do og:image)
-async function getCapaOJogo() {
-  try {
-    const { data } = await axios.get('https://www.vercapas.com/capa/o-jogo.html', {
+    const response = await axios.head(url, {
       timeout: 8000,
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36' }
+      headers: { 'User-Agent': 'Mozilla/5.0' }
     });
-    const $ = cheerio.load(data);
-    // Extrai a imagem grande diretamente do og:image
-    const ogImage = $('meta[property="og:image"]').attr('content');
-    if (ogImage && ogImage.includes('covers')) {
-      // Converte o URL da thumbnail para a imagem grande
-      return ogImage.replace('/thumbc/', '/covers/').replace('thumbc', 'covers');
-    }
+    if (response.status === 200) return url;
     return null;
   } catch (e) {
     return null;
@@ -53,16 +36,16 @@ async function publicarCapas() {
   const channel = await client.channels.fetch(CHANNEL_ID);
   if (!channel) return;
 
-  await channel.send('📰 **Capas Desportivas de hoje!**');
-
   const jornais = [
-    { nome: 'A Bola', cor: 0xFF0000, fn: () => getCapaCDN('a-bola') },
-    { nome: 'Record', cor: 0x006400, fn: () => getCapaCDN('record') },
-    { nome: 'O Jogo',  cor: 0xFF8C00, fn: () => getCapaOJogo() }
+    { key: 'a_bola', nome: 'A Bola', cor: 0xFF0000 },
+    { key: 'record', nome: 'Record', cor: 0x006400 },
+    { key: 'o_jogo', nome: 'O Jogo', cor: 0xFF8C00 }
   ];
 
+  await channel.send('📰 **Capas Desportivas de hoje!**');
+
   for (const jornal of jornais) {
-    const capaUrl = await jornal.fn();
+    const capaUrl = await getCapa(jornal.key);
     const embed = new EmbedBuilder()
       .setTitle(`📰 ${jornal.nome}`)
       .setColor(jornal.cor)
