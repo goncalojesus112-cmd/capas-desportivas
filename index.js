@@ -68,7 +68,7 @@ client.once('ready', async () => {
   console.log(`Bot online: ${client.user.tag}`);
   cron.schedule('0 9 * * *', publicarCapas, { timezone: 'Europe/Lisbon' });
 
-  // TESTE: publica imediatamente
+  // Publica imediatamente ao arrancar (confirma que está tudo a funcionar)
   await publicarCapas();
 });
 
